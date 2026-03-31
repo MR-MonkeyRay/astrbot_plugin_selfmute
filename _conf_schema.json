@@ -1,0 +1,23 @@
+{
+    "max_daily_count": {
+        "description": "每日最大自裁次数",
+        "type": "int",
+        "hint": "每个用户每天在单个群组中可以使用自裁指令的最大次数",
+        "default": 3,
+        "obvious_hint": true
+    },
+    "min_random_seconds": {
+        "description": "随机禁言最小秒数",
+        "type": "int",
+        "hint": "使用随机禁言时，单次随机时长的最小值（秒）",
+        "default": 60,
+        "obvious_hint": true
+    },
+    "max_random_seconds": {
+        "description": "随机禁言最大秒数",
+        "type": "int",
+        "hint": "使用随机禁言时，单次随机时长的最大值（秒）。实际禁言时长 = 随机值 × 当日已使用次数",
+        "default": 3600,
+        "obvious_hint": true
+    }
+}

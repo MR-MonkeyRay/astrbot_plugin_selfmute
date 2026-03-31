@@ -33,6 +33,7 @@ sys.modules["astrbot"] = astrbot_mock
 sys.modules["astrbot.api"] = api_mock
 sys.modules["astrbot.api.event"] = api_mock.event
 sys.modules["astrbot.api.star"] = api_mock.star
+sys.modules["astrbot.api.star.config"] = api_mock.star.config
 
 from main import SelfMutePlugin, MAX_DAILY_COUNT, MAX_MUTE_SECONDS, STATE_KEY
 

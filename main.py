@@ -3,20 +3,26 @@ import random
 from datetime import date
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
+from astrbot.api.star.config import AstrBotConfig
 from astrbot.api import logger
 
-# 常量定义
+# 默认常量（配置缺失时使用）
 MAX_DAILY_COUNT = 3
-MAX_MUTE_SECONDS = 30 * 24 * 60 * 60  # 2592000
+MAX_MUTE_SECONDS = 30 * 24 * 60 * 60  # 2592000，QQ 平台最大限制，保持硬编码
 MIN_RANDOM_SECONDS = 60
 MAX_RANDOM_SECONDS = 3600
 STATE_KEY = "selfmute_state"
 
 @register("selfmute", "MonkeyRay", "自裁插件 - 移植自 Mirai SelfMute", "1.0.0")
 class SelfMutePlugin(Star):
-    def __init__(self, context: Context):
+    def __init__(self, context: Context, config: AstrBotConfig = None):
         super().__init__(context)
         self._state_lock = asyncio.Lock()
+
+        # 从配置读取参数，缺失时使用默认值
+        self.max_daily_count = config.get("max_daily_count", MAX_DAILY_COUNT) if config else MAX_DAILY_COUNT
+        self.min_random_seconds = config.get("min_random_seconds", MIN_RANDOM_SECONDS) if config else MIN_RANDOM_SECONDS
+        self.max_random_seconds = config.get("max_random_seconds", MAX_RANDOM_SECONDS) if config else MAX_RANDOM_SECONDS
 
     @filter.command("selfmute", alias=["自裁"])
     async def selfmute(self, event: AstrMessageEvent, seconds: str = ""):
@@ -65,7 +71,7 @@ class SelfMutePlugin(Star):
             # 归一化：确保计数非负
             used_count = max(0, used_count)
 
-            if used_count >= MAX_DAILY_COUNT:
+            if used_count >= self.max_daily_count:
                 yield event.plain_result("你是抖m吧?😨当日自裁次数达到上限了!明天再来吧!真是的...😡")
                 return
 
@@ -129,7 +135,7 @@ class SelfMutePlugin(Star):
 
         if seconds < 1:
             # 随机禁言：随机值 × 当日次数
-            duration = random.randint(MIN_RANDOM_SECONDS, MAX_RANDOM_SECONDS) * count
+            duration = random.randint(self.min_random_seconds, self.max_random_seconds) * count
             is_random = True
         else:
             duration = int(seconds)
@@ -144,11 +150,11 @@ class SelfMutePlugin(Star):
         time_str = self._format_time(duration)
 
         if duration >= MAX_MUTE_SECONDS:
-            return f"⚠️群友\"{user_name}({user_id})\"已获得30天豪华小黑屋居住资格!({count}/3)"
+            return f"⚠️群友\"{user_name}({user_id})\"已获得30天豪华小黑屋居住资格!({count}/{self.max_daily_count})"
         elif is_random:
-            return f"🥳恭喜群友\"{user_name}({user_id})\"喜提禁言{time_str}!({count}/3)"
+            return f"🥳恭喜群友\"{user_name}({user_id})\"喜提禁言{time_str}!({count}/{self.max_daily_count})"
         else:
-            return f"🎉群友\"{user_name}({user_id})\"选择了自裁{time_str}!({count}/3)"
+            return f"🎉群友\"{user_name}({user_id})\"选择了自裁{time_str}!({count}/{self.max_daily_count})"
 
     def _format_time(self, seconds: int) -> str:
         """格式化时长为可读字符串"""
