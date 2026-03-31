@@ -1,14 +1,76 @@
-# astrbot-plugin-helloworld
+# AstrBot SelfMute 插件
 
-AstrBot 插件模板 / A template plugin for AstrBot plugin feature
+自裁插件 - 移植自 Mirai SelfMute
 
-> [!NOTE]
-> This repo is just a template of [AstrBot](https://github.com/AstrBotDevs/AstrBot) Plugin.
-> 
-> [AstrBot](https://github.com/AstrBotDevs/AstrBot) is an agentic assistant for both personal and group conversations. It can be deployed across dozens of mainstream instant messaging platforms, including QQ, Telegram, Feishu, DingTalk, Slack, LINE, Discord, Matrix, etc. In addition, it provides a reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you need a personal AI companion, an intelligent customer support agent, an automation assistant, or an enterprise knowledge base, AstrBot enables you to quickly build AI applications directly within your existing messaging workflows.
+## 功能介绍
 
-# Supports
+允许群成员使用 `/自裁` 或 `/selfmute` 指令进行自我禁言。
 
-- [AstrBot Repo](https://github.com/AstrBotDevs/AstrBot)
-- [AstrBot Plugin Development Docs (Chinese)](https://docs.astrbot.app/dev/star/plugin-new.html)
-- [AstrBot Plugin Development Docs (English)](https://docs.astrbot.app/en/dev/star/plugin-new.html)
+### 核心特性
+- 🎲 随机禁言：不指定时长时，随机禁言 60-3600 秒 × 当日次数
+- 🔢 指定时长：可指定禁言秒数（最大 30 天）
+- 📅 每日限制：每人每天最多 3 次
+- 🛡️ 权限保护：管理员/群主免疫，Bot 需要管理员权限
+- 🔒 并发安全：使用异步锁保证数据一致性
+
+## 使用方法
+
+### 基础用法
+```
+/自裁          # 随机禁言
+/selfmute      # 随机禁言（英文指令）
+/自裁 300      # 禁言 300 秒（5 分钟）
+/selfmute 3600 # 禁言 3600 秒（1 小时）
+```
+
+### 禁言规则
+1. **随机禁言**：不指定时长时，禁言时长 = 随机值（60-3600秒）× 当日第几次
+   - 第 1 次：60-3600 秒
+   - 第 2 次：120-7200 秒
+   - 第 3 次：180-10800 秒
+
+2. **指定时长**：指定秒数，最大 2,592,000 秒（30 天）
+
+3. **每日限制**：每人每天最多自裁 3 次，跨天自动重置
+
+4. **权限要求**：
+   - Bot 必须是群管理员或群主
+   - 群管理员和群主对本指令免疫
+
+## 安装
+
+1. 克隆仓库到 AstrBot 插件目录
+2. 重启 AstrBot
+3. 确保 Bot 在群内有管理员权限
+
+## 技术实现
+
+- **框架**：AstrBot Plugin API
+- **后端**：NapCat (OneBot 11)
+- **并发控制**：asyncio.Lock
+- **数据持久化**：AstrBot KV 存储
+
+## 开发
+
+### 运行测试
+```bash
+pytest tests/ -v
+pytest tests/ --cov=main --cov-report=term-missing
+```
+
+### 测试覆盖
+- 基础功能：随机禁言、指定时长、时长格式化
+- 权限检查：非群聊、管理员免疫、Bot 权限
+- 每日限制：3 次限制、跨天重置
+- 并发安全：10 个并发请求测试
+- 错误处理：非数字参数、禁言失败、特殊浮点数
+
+## 许可证
+
+GNU Affero General Public License v3.0
+
+详见 [LICENSE](LICENSE) 文件。
+
+## 致谢
+
+本插件移植自 Mirai 框架的 SelfMute 插件，保留了原版的核心逻辑和用户体验。
