@@ -19,5 +19,12 @@
         "hint": "使用随机禁言时，单次随机时长的最大值（秒）。实际禁言时长 = 随机值 × 当日已使用次数",
         "default": 3600,
         "obvious_hint": true
+    },
+    "use_wake_prefix": {
+        "description": "是否需要唤醒词才能触发自裁指令",
+        "type": "bool",
+        "hint": "默认 false：支持裸消息触发（如 自裁）；true：需要唤醒词（如 /自裁）",
+        "default": false,
+        "obvious_hint": true
     }
 }

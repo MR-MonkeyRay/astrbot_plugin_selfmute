@@ -11,6 +11,7 @@ astrbot_mock = MagicMock()
 # filter.command 必须是 identity 装饰器，保留原方法
 filter_mock = MagicMock()
 filter_mock.command = lambda *a, **kw: lambda fn: fn
+filter_mock.regex = lambda *a, **kw: lambda fn: fn
 
 api_mock = MagicMock()
 api_mock.event = MagicMock()

@@ -9,9 +9,9 @@ from main import MAX_DAILY_COUNT, STATE_KEY
 
 
 async def _invoke(plugin, event, seconds=""):
-    """调用 selfmute 并收集 yield 出的所有结果"""
+    """调用 selfmute_command 并收集 yield 出的所有结果"""
     results = []
-    async for item in plugin.selfmute(event, seconds):
+    async for item in plugin.selfmute_command(event, seconds):
         results.append(item)
     return results
 

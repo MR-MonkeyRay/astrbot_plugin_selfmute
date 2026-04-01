@@ -6,14 +6,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from main import MAX_DAILY_COUNT, MAX_MUTE_SECONDS, MIN_RANDOM_SECONDS, MAX_RANDOM_SECONDS
+from main import SelfMutePlugin
 
 
 # ──────────────────────────── 辅助函数 ────────────────────────────
 
 async def _invoke(plugin, event, seconds=""):
-    """调用 selfmute 并收集 yield 出的所有结果"""
+    """调用 selfmute_command 并收集 yield 出的所有结果"""
     results = []
-    async for item in plugin.selfmute(event, seconds):
+    async for item in plugin.selfmute_command(event, seconds):
         results.append(item)
     return results
 
@@ -265,3 +266,129 @@ class TestErrorHandling:
         duration, is_random = plugin._calculate_duration("inf", 1)
         assert is_random is True
         assert MIN_RANDOM_SECONDS <= duration <= MAX_MUTE_SECONDS
+
+
+class TestWakePrefixRouting:
+    """use_wake_prefix 路由测试"""
+
+    @pytest.mark.asyncio
+    async def test_command_works_with_wake_prefix_true(self, mock_context, mock_event):
+        """wake_prefix=true 时，command handler 应正常工作"""
+        config = MagicMock()
+        config.get = lambda k, d=None: True if k == "use_wake_prefix" else d
+        plugin = SelfMutePlugin(mock_context, config)
+        plugin.get_kv_data = AsyncMock(return_value={"date": "", "counters": {}})
+        plugin.put_kv_data = AsyncMock()
+
+        mock_event.is_at_or_wake_command = True
+
+        results = []
+        async for r in plugin.selfmute_command(mock_event, seconds="300"):
+            results.append(r)
+
+        assert len(results) == 1
+        assert "选择了自裁" in results[0]
+
+    @pytest.mark.asyncio
+    async def test_listener_blocked_when_wake_prefix_true(self, mock_context, mock_event):
+        """wake_prefix=true 时，listener 应被阻止"""
+        config = MagicMock()
+        config.get = lambda k, d=None: True if k == "use_wake_prefix" else d
+        plugin = SelfMutePlugin(mock_context, config)
+
+        mock_event.is_at_or_wake_command = False
+        mock_event.get_message_str = MagicMock(return_value="自裁 300")
+
+        results = []
+        async for r in plugin.selfmute_listener(mock_event):
+            results.append(r)
+
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_listener_works_when_wake_prefix_false(self, mock_context, mock_event):
+        """wake_prefix=false 时，listener 应正常工作"""
+        config = MagicMock()
+        config.get = lambda k, d=None: False if k == "use_wake_prefix" else d
+        plugin = SelfMutePlugin(mock_context, config)
+        plugin.get_kv_data = AsyncMock(return_value={"date": "", "counters": {}})
+        plugin.put_kv_data = AsyncMock()
+
+        mock_event.is_at_or_wake_command = False
+        mock_event.get_message_str = MagicMock(return_value="自裁 300")
+
+        results = []
+        async for r in plugin.selfmute_listener(mock_event):
+            results.append(r)
+
+        assert len(results) == 1
+        assert "选择了自裁" in results[0]
+
+    @pytest.mark.asyncio
+    async def test_no_double_execution(self, mock_context, mock_event):
+        """wake_prefix=false 时，带前缀消息不应双重执行"""
+        config = MagicMock()
+        config.get = lambda k, d=None: False if k == "use_wake_prefix" else d
+        plugin = SelfMutePlugin(mock_context, config)
+
+        mock_event.is_at_or_wake_command = True
+        mock_event.get_message_str = MagicMock(return_value="自裁 300")
+
+        results = []
+        async for r in plugin.selfmute_listener(mock_event):
+            results.append(r)
+
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_private_chat_rejected(self, mock_context, mock_event):
+        """私聊应被拒绝"""
+        config = MagicMock()
+        config.get = lambda k, d=None: False if k == "use_wake_prefix" else d
+        plugin = SelfMutePlugin(mock_context, config)
+
+        mock_event.get_group_id = MagicMock(return_value=None)
+        mock_event.is_at_or_wake_command = False
+        mock_event.get_message_str = MagicMock(return_value="自裁 300")
+
+        results = []
+        async for r in plugin.selfmute_listener(mock_event):
+            results.append(r)
+
+        assert len(results) == 1
+        assert "只能在群聊中使用" in results[0]
+
+    @pytest.mark.asyncio
+    async def test_empty_param_random_mute(self, mock_context, mock_event):
+        """空参数应触发随机禁言"""
+        config = MagicMock()
+        config.get = lambda k, d=None: False if k == "use_wake_prefix" else d
+        plugin = SelfMutePlugin(mock_context, config)
+        plugin.get_kv_data = AsyncMock(return_value={"date": "", "counters": {}})
+        plugin.put_kv_data = AsyncMock()
+
+        mock_event.is_at_or_wake_command = False
+        mock_event.get_message_str = MagicMock(return_value="自裁")
+
+        results = []
+        async for r in plugin.selfmute_listener(mock_event):
+            results.append(r)
+
+        assert len(results) == 1
+        assert "喜提禁言" in results[0]
+
+    @pytest.mark.asyncio
+    async def test_non_matching_message_ignored(self, mock_context, mock_event):
+        """不匹配的消息应被忽略"""
+        config = MagicMock()
+        config.get = lambda k, d=None: False if k == "use_wake_prefix" else d
+        plugin = SelfMutePlugin(mock_context, config)
+
+        mock_event.is_at_or_wake_command = False
+        mock_event.get_message_str = MagicMock(return_value="其他消息")
+
+        results = []
+        async for r in plugin.selfmute_listener(mock_event):
+            results.append(r)
+
+        assert results == []

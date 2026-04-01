@@ -1,5 +1,6 @@
 import asyncio
 import random
+import re
 from datetime import date
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
@@ -12,6 +13,7 @@ MAX_MUTE_SECONDS = 30 * 24 * 60 * 60  # 2592000，QQ 平台最大限制，保持
 MIN_RANDOM_SECONDS = 60
 MAX_RANDOM_SECONDS = 3600
 STATE_KEY = "selfmute_state"
+_SELFMUTE_RE = re.compile(r"^(?:selfmute|自裁)(?:\s+([\s\S]+))?$")
 
 @register("selfmute", "MonkeyRay", "自裁插件 - 移植自 Mirai SelfMute", "1.0.0")
 class SelfMutePlugin(Star):
@@ -23,10 +25,34 @@ class SelfMutePlugin(Star):
         self.max_daily_count = config.get("max_daily_count", MAX_DAILY_COUNT) if config else MAX_DAILY_COUNT
         self.min_random_seconds = config.get("min_random_seconds", MIN_RANDOM_SECONDS) if config else MIN_RANDOM_SECONDS
         self.max_random_seconds = config.get("max_random_seconds", MAX_RANDOM_SECONDS) if config else MAX_RANDOM_SECONDS
+        self.use_wake_prefix = config.get("use_wake_prefix", False) if config else False
 
     @filter.command("selfmute", alias=["自裁"])
-    async def selfmute(self, event: AstrMessageEvent, seconds: str = ""):
+    async def selfmute_command(self, event: AstrMessageEvent, seconds: str = ""):
         """自裁指令 - 自我禁言"""
+        async for result in self._handle_selfmute(event, seconds):
+            yield result
+
+    @filter.regex(r"^(?:selfmute|自裁)(?:\s+[\s\S]+)?$")
+    async def selfmute_listener(self, event: AstrMessageEvent):
+        """消息监听 - 支持裸消息触发"""
+        if self.use_wake_prefix:
+            return
+
+        if event.is_at_or_wake_command:
+            return
+
+        msg = event.get_message_str().strip()
+        m = _SELFMUTE_RE.match(msg)
+        if not m:
+            return
+
+        seconds = m.group(1) or ""
+        async for result in self._handle_selfmute(event, seconds):
+            yield result
+
+    async def _handle_selfmute(self, event: AstrMessageEvent, seconds: str = ""):
+        """自裁核心逻辑"""
         # 1. 校验群聊
         group_id = event.get_group_id()
         if not group_id:
