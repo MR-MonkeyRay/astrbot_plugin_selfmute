@@ -1,4 +1,4 @@
-"""SelfMute 状态存储测试"""
+"""SelfMute 状态存储与运行时兼容测试"""
 
 from datetime import date, timedelta
 from unittest.mock import AsyncMock
@@ -6,6 +6,47 @@ from unittest.mock import AsyncMock
 import pytest
 
 from selfmute.state import SelfMuteStateStore
+
+
+class TestResolveBotSelfId:
+    """机器人自身 ID 解析兼容性"""
+
+    def test_prefers_event_get_self_id(self):
+        from types import SimpleNamespace
+        from selfmute.service import _resolve_bot_self_id
+
+        event = SimpleNamespace(
+            get_self_id=lambda: "10001",
+            message_obj=SimpleNamespace(self_id="10002"),
+            bot=SimpleNamespace(self_id="10003"),
+        )
+
+        assert _resolve_bot_self_id(event) == "10001"
+
+    def test_falls_back_to_message_obj_self_id(self):
+        from types import SimpleNamespace
+        from selfmute.service import _resolve_bot_self_id
+
+        event = SimpleNamespace(
+            get_self_id=lambda: "",
+            message_obj=SimpleNamespace(self_id="10002"),
+            bot=SimpleNamespace(self_id="10003"),
+        )
+
+        assert _resolve_bot_self_id(event) == "10002"
+
+    def test_raises_when_event_has_no_supported_self_id_source(self):
+        from types import SimpleNamespace
+        import pytest
+        from selfmute.service import _resolve_bot_self_id
+
+        event = SimpleNamespace(
+            get_self_id=lambda: None,
+            message_obj=SimpleNamespace(self_id=""),
+        )
+
+        with pytest.raises(ValueError, match="无法解析机器人自身 ID"):
+            _resolve_bot_self_id(event)
 
 
 @pytest.fixture

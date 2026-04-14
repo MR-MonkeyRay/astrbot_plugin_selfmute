@@ -14,6 +14,30 @@ DurationCalculator = Callable[[str, int], tuple[int, bool]]
 SuccessMessageBuilder = Callable[[str, str, int, int, bool], str]
 
 
+def _resolve_bot_self_id(event: AstrMessageEvent) -> str:
+    """解析机器人自身 ID，优先依赖 AstrBot 官方事件抽象。"""
+    get_self_id = getattr(event, "get_self_id", None)
+    if callable(get_self_id):
+        value = get_self_id()
+        if value not in {None, ""}:
+            return str(value)
+
+    message_obj = getattr(event, "message_obj", None)
+    message_self_id = getattr(message_obj, "self_id", None)
+    if message_self_id not in {None, ""}:
+        return str(message_self_id)
+
+    raise ValueError("无法解析机器人自身 ID")
+
+
+def _require_int_id(value: str, field_name: str) -> int:
+    """将平台 ID 规范为整数，便于对接 OneBot v11 接口。"""
+    try:
+        return int(str(value))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} 不是有效的整数 ID: {value!r}") from exc
+
+
 @dataclass(slots=True)
 class SelfMuteService:
     """自裁业务服务：负责权限检查、禁言执行与状态落盘。"""
@@ -55,12 +79,15 @@ class SelfMuteService:
                 return "你是抖m吧?😨当日自裁次数达到上限了!明天再来吧!真是的...😡"
 
             try:
-                bot_self_id = event.bot.self_id
+                bot_self_id = _resolve_bot_self_id(event)
+                group_id_int = _require_int_id(group_id, "group_id")
+                bot_self_id_int = _require_int_id(bot_self_id, "bot_self_id")
                 logger.debug("检查 Bot 权限: bot_self_id=%s, group_id=%s", bot_self_id, group_id)
                 bot_info = await event.bot.call_action(
                     "get_group_member_info",
-                    group_id=int(group_id),
-                    user_id=int(bot_self_id),
+                    group_id=group_id_int,
+                    user_id=bot_self_id_int,
+                    self_id=bot_self_id_int,
                 )
                 bot_role = bot_info.get("role", "member")
                 logger.debug("Bot 权限查询结果: bot_role=%s, raw=%s", bot_role, bot_info)
@@ -74,6 +101,7 @@ class SelfMuteService:
             logger.debug("禁言时长: duration=%s, is_random=%s", duration, is_random)
 
             try:
+                user_id_int = _require_int_id(user_id, "user_id")
                 logger.debug(
                     "执行 set_group_ban: group_id=%s, user_id=%s, duration=%s",
                     group_id,
@@ -82,9 +110,10 @@ class SelfMuteService:
                 )
                 await event.bot.call_action(
                     "set_group_ban",
-                    group_id=int(group_id),
-                    user_id=int(user_id),
+                    group_id=group_id_int,
+                    user_id=user_id_int,
                     duration=duration,
+                    self_id=bot_self_id_int,
                 )
                 logger.debug("set_group_ban 执行成功")
             except Exception as e:
@@ -97,4 +126,3 @@ class SelfMuteService:
         message = self.build_success_message(user_name, user_id, duration, current_count, is_random)
         logger.debug("返回成功消息: %s", message)
         return message
-
