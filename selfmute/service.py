@@ -38,6 +38,22 @@ def _require_int_id(value: str, field_name: str) -> int:
         raise ValueError(f"{field_name} 不是有效的整数 ID: {value!r}") from exc
 
 
+async def _get_group_member_role(
+    event: AstrMessageEvent,
+    group_id_int: int,
+    user_id_int: int,
+    self_id: int,
+) -> str:
+    """查询群成员角色，统一返回 owner/admin/member。"""
+    info = await event.bot.call_action(
+        "get_group_member_info",
+        group_id=group_id_int,
+        user_id=user_id_int,
+        self_id=self_id,
+    )
+    return str(info.get("role", "member"))
+
+
 @dataclass(slots=True)
 class SelfMuteService:
     """自裁业务服务：负责权限检查、禁言执行与状态落盘。"""
@@ -63,10 +79,6 @@ class SelfMuteService:
             logger.debug("拒绝: 非群聊消息")
             return "该指令只能在群聊中使用"
 
-        if event.role in {"admin", "owner"} or event.is_admin():
-            logger.debug("拒绝: 管理员免疫 (role=%s, is_admin=%s)", event.role, event.is_admin())
-            return "群主和管理员对本指令免疫的噢!~"
-
         user_id = event.get_sender_id()
         user_name = event.get_sender_name()
         logger.debug("通过权限检查: user_id=%s, user_name=%s", user_id, user_name)
@@ -81,16 +93,27 @@ class SelfMuteService:
             try:
                 bot_self_id = _resolve_bot_self_id(event)
                 group_id_int = _require_int_id(group_id, "group_id")
+                user_id_int = _require_int_id(user_id, "user_id")
                 bot_self_id_int = _require_int_id(bot_self_id, "bot_self_id")
-                logger.debug("检查 Bot 权限: bot_self_id=%s, group_id=%s", bot_self_id, group_id)
-                bot_info = await event.bot.call_action(
-                    "get_group_member_info",
-                    group_id=group_id_int,
-                    user_id=bot_self_id_int,
+
+                sender_role = await _get_group_member_role(
+                    event,
+                    group_id_int=group_id_int,
+                    user_id_int=user_id_int,
                     self_id=bot_self_id_int,
                 )
-                bot_role = bot_info.get("role", "member")
-                logger.debug("Bot 权限查询结果: bot_role=%s, raw=%s", bot_role, bot_info)
+                logger.debug("发送者权限查询结果: sender_role=%s, user_id=%s", sender_role, user_id)
+                if sender_role in {"admin", "owner"}:
+                    return "群主和管理员对本指令免疫的噢!~"
+
+                logger.debug("检查 Bot 权限: bot_self_id=%s, group_id=%s", bot_self_id, group_id)
+                bot_role = await _get_group_member_role(
+                    event,
+                    group_id_int=group_id_int,
+                    user_id_int=bot_self_id_int,
+                    self_id=bot_self_id_int,
+                )
+                logger.debug("Bot 权限查询结果: bot_role=%s", bot_role)
                 if bot_role not in {"admin", "owner"}:
                     return "机器人权限不足: 非群主或管理员,无法执行禁言操作😭..."
             except Exception as e:
@@ -101,7 +124,6 @@ class SelfMuteService:
             logger.debug("禁言时长: duration=%s, is_random=%s", duration, is_random)
 
             try:
-                user_id_int = _require_int_id(user_id, "user_id")
                 logger.debug(
                     "执行 set_group_ban: group_id=%s, user_id=%s, duration=%s",
                     group_id,

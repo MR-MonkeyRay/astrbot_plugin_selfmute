@@ -22,8 +22,7 @@ def _make_event(**overrides):
         "group_id": "123456",
         "sender_id": "789012",
         "sender_name": "测试用户",
-        "role": "member",
-        "is_admin": False,
+        "sender_role": "member",
         "bot_role": "admin",
     }
     defaults.update(overrides)
@@ -33,12 +32,14 @@ def _make_event(**overrides):
     event.get_group_id.return_value = d["group_id"]
     event.get_sender_id.return_value = d["sender_id"]
     event.get_sender_name.return_value = d["sender_name"]
-    event.role = d["role"]
-    event.is_admin.return_value = d["is_admin"]
 
     event.bot = MagicMock()
     event.bot.call_action = AsyncMock(
-        side_effect=[{"role": d["bot_role"]}, None]
+        side_effect=[
+            {"role": d["sender_role"]},
+            {"role": d["bot_role"]},
+            None,
+        ]
     )
     event.bot.self_id = "999888777"
     event.plain_result = MagicMock(side_effect=lambda x: x)

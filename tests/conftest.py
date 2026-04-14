@@ -46,8 +46,7 @@ def _make_mock_event(
     group_id="123456",
     sender_id="789012",
     sender_name="测试用户",
-    role="member",
-    is_admin=False,
+    sender_role="member",
     bot_role="admin",
 ):
     """构造一个完整的 mock AstrMessageEvent"""
@@ -55,14 +54,13 @@ def _make_mock_event(
     event.get_group_id.return_value = group_id
     event.get_sender_id.return_value = sender_id
     event.get_sender_name.return_value = sender_name
-    event.role = role
-    event.is_admin.return_value = is_admin
 
     # Bot mock — bot.call_action 是异步的
     event.bot = MagicMock()
     event.bot.call_action = AsyncMock(
         side_effect=[
-            {"role": bot_role},  # get_group_member_info
+            {"role": sender_role},  # get_group_member_info(sender)
+            {"role": bot_role},  # get_group_member_info(bot)
             None,  # set_group_ban
         ]
     )

@@ -89,25 +89,33 @@ class TestPermission:
 
     @pytest.mark.asyncio
     async def test_admin_immunity(self, plugin, make_event):
-        """管理员免疫 — role=admin"""
-        event = make_event(role="admin")
-        results = await _invoke(plugin, event)
+        """管理员免疫 — 查询发送者真实群角色为 admin"""
+        event = make_event(sender_role="admin")
+        results = await _invoke(plugin, event, "666")
         assert len(results) == 1
         assert "免疫" in results[0]
 
     @pytest.mark.asyncio
     async def test_owner_immunity(self, plugin, make_event):
-        """群主免疫 — role=owner"""
-        event = make_event(role="owner")
+        """群主免疫 — 查询发送者真实群角色为 owner"""
+        event = make_event(sender_role="owner")
         results = await _invoke(plugin, event)
         assert len(results) == 1
         assert "免疫" in results[0]
 
     @pytest.mark.asyncio
-    async def test_is_admin_immunity(self, plugin, make_event):
-        """is_admin 返回 True 时也免疫"""
-        event = make_event(is_admin=True)
-        results = await _invoke(plugin, event)
+    async def test_admin_immunity_with_duration(self, plugin, make_event):
+        """管理员带参数也免疫 — 避免出现“自裁 666”被执行"""
+        event = make_event(sender_role="admin")
+        results = await _invoke(plugin, event, "666")
+        assert len(results) == 1
+        assert "免疫" in results[0]
+
+    @pytest.mark.asyncio
+    async def test_owner_immunity_with_duration(self, plugin, make_event):
+        """群主带参数也免疫"""
+        event = make_event(sender_role="owner")
+        results = await _invoke(plugin, event, "666")
         assert len(results) == 1
         assert "免疫" in results[0]
 
@@ -242,9 +250,10 @@ class TestErrorHandling:
         plugin.get_kv_data = AsyncMock(
             return_value={"date": today, "counters": {"123456": {}}}
         )
-        # 第 1 次 call_action 返回 bot 权限信息，第 2 次抛异常
+        # 第 1 次 call_action 返回发送者权限信息，第 2 次返回 bot 权限信息，第 3 次抛异常
         event.bot.call_action = AsyncMock(
             side_effect=[
+                {"role": "member"},
                 {"role": "admin"},
                 RuntimeError("ban failed"),
             ]
