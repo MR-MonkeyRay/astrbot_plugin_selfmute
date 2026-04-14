@@ -1,6 +1,6 @@
 name: astrbot_plugin_selfmute
 display_name: SelfMute
 desc: 自裁插件
-version: v1.0.0
+version: v1.1.0
 author: MR-MonkeyRay
 repo: https://github.com/MR-MonkeyRay/astrbot_plugin_selfmute

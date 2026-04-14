@@ -40,10 +40,13 @@ def _make_event(**overrides):
     event.bot.call_action = AsyncMock(
         side_effect=[{"role": d["bot_role"]}, None]
     )
+    event.bot.self_id = "999888777"
     event.plain_result = MagicMock(side_effect=lambda x: x)
 
     # Mock event.get_self_id() 方法
     event.get_self_id = MagicMock(return_value="999888777")
+    event.is_at_or_wake_command = False
+    event.get_message_str = MagicMock(return_value="")
 
     return event
 

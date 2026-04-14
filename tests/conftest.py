@@ -1,9 +1,11 @@
 import sys
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # 将项目根目录加入 sys.path
-sys.path.insert(0, "/data/monkeyray/workspace/astrbot_plugin_selfmute")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 # Mock astrbot 模块，避免导入时找不到依赖
 astrbot_mock = MagicMock()
@@ -64,9 +66,12 @@ def _make_mock_event(
             None,  # set_group_ban
         ]
     )
+    event.bot.self_id = "999888777"
 
     # Mock event.get_self_id() 方法
     event.get_self_id = MagicMock(return_value="999888777")
+    event.is_at_or_wake_command = False
+    event.get_message_str = MagicMock(return_value="")
 
     # plain_result 直接返回传入的文本，方便断言
     event.plain_result = MagicMock(side_effect=lambda x: x)

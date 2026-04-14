@@ -50,6 +50,29 @@ selfmute      # 随机禁言（英文）
 
 ## 配置选项
 
+### max_daily_count
+
+控制每个用户在单个群组内每日最多可自裁的次数。
+
+- **默认值**: `3`
+- **类型**: int
+
+### min_random_seconds
+
+控制随机禁言时，单次随机时长的最小值。
+
+- **默认值**: `60`
+- **类型**: int
+
+### max_random_seconds
+
+控制随机禁言时，单次随机时长的最大值。
+
+- **默认值**: `3600`
+- **类型**: int
+
+**说明**：实际随机禁言时长 = `随机值 × 当日第几次`。
+
 ### use_wake_prefix
 
 控制是否需要唤醒词前缀才能触发指令。
@@ -77,19 +100,40 @@ selfmute      # 随机禁言（英文）
 - AstrBot Plugin API
 - asyncio.Lock 并发控制
 - KV 存储持久化
+- 薄入口 + 模块化业务层
+
+### 项目结构
+
+```text
+.
+├── main.py                  # AstrBot 插件入口与事件路由
+├── selfmute/
+│   ├── constants.py         # 常量与正则
+│   ├── config.py            # 配置读取
+│   ├── parser.py            # 参数解析
+│   ├── messages.py          # 文案与时间格式化
+│   ├── state.py             # KV 状态读写与归一化
+│   └── service.py           # 自裁业务编排
+└── tests/
+    ├── test_selfmute.py     # 主流程行为测试
+    ├── test_concurrent.py   # 并发安全测试
+    ├── test_parser.py       # 参数解析测试
+    └── test_state.py        # 状态存储测试
+```
 
 ## 开发
 
 ### 运行测试
 ```bash
-pytest tests/ -v
-pytest tests/ --cov=main --cov-report=term-missing
+~/miniconda3/bin/python -m pytest tests/ -v
+~/miniconda3/bin/python -m pytest tests/ --cov=main --cov-report=term-missing
 ```
 
 ### 测试覆盖
 - 基础功能、权限检查、每日限制
 - 并发安全、错误处理
 - 路由测试、双重执行防护
+- 参数解析与状态归一化
 
 ## 许可证
 
