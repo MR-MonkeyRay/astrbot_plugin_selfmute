@@ -36,14 +36,22 @@ class SelfMutePlugin(Star):
             logger.exception(f"selfmute_command 执行异常: {e}")
             yield event.plain_result(f"自裁失败: {str(e)}")
 
+    def _should_handle_with_listener(self, event: AstrMessageEvent) -> bool:
+        """判断当前消息是否应由裸消息 listener 处理。
+
+        AstrBot 的 `command` 过滤器只处理带唤醒词/At 的消息，
+        但 `regex` 过滤器不会受到 wake_prefix 约束。
+        因此这里必须显式拦截所有 wake 消息，避免与标准指令重复执行。
+        """
+        if self.use_wake_prefix:
+            return False
+        return not event.is_at_or_wake_command
+
     @filter.regex(r"^(?:selfmute|自裁)(?:\s+[\s\S]+)?$")
     async def selfmute_listener(self, event: AstrMessageEvent):
         """消息监听 - 支持裸消息触发"""
         try:
-            if self.use_wake_prefix:
-                return
-
-            if event.is_at_or_wake_command:
+            if not self._should_handle_with_listener(event):
                 return
 
             msg = event.get_message_str().strip()
