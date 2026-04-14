@@ -37,11 +37,14 @@ def _make_event(**overrides):
     event.is_admin.return_value = d["is_admin"]
 
     event.bot = MagicMock()
-    event.bot.self_id = "bot_qq"
     event.bot.call_action = AsyncMock(
         side_effect=[{"role": d["bot_role"]}, None]
     )
     event.plain_result = MagicMock(side_effect=lambda x: x)
+
+    # Mock event.get_self_id() 方法
+    event.get_self_id = MagicMock(return_value="999888777")
+
     return event
 
 

@@ -21,8 +21,9 @@ api_mock.event.AstrMessageEvent = MagicMock()
 
 # Star 需要是真实基类，让子类正常继承方法
 class _FakeStar:
-    def __init__(self, context):
+    def __init__(self, context, config=None):
         self.context = context
+        self.config = config
 
 
 api_mock.star = MagicMock()
@@ -57,13 +58,15 @@ def _make_mock_event(
 
     # Bot mock — bot.call_action 是异步的
     event.bot = MagicMock()
-    event.bot.self_id = "bot_qq"
     event.bot.call_action = AsyncMock(
         side_effect=[
             {"role": bot_role},  # get_group_member_info
             None,  # set_group_ban
         ]
     )
+
+    # Mock event.get_self_id() 方法
+    event.get_self_id = MagicMock(return_value="999888777")
 
     # plain_result 直接返回传入的文本，方便断言
     event.plain_result = MagicMock(side_effect=lambda x: x)
