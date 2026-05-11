@@ -34,7 +34,7 @@ from selfmute.state import SelfMuteStateStore
 _SELFMUTE_RE = SELFMUTE_RE
 
 
-@register(name="selfmute", author="MonkeyRay", desc="自裁插件", version="1.1.0")
+@register(name="selfmute", author="MonkeyRay", desc="自裁插件", version="1.1.1")
 class SelfMutePlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context, config)

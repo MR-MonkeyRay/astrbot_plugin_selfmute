@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Callable
 
@@ -12,6 +13,44 @@ from .state import SelfMuteStateStore
 
 DurationCalculator = Callable[[str, int], tuple[int, bool]]
 SuccessMessageBuilder = Callable[[str, str, int, int, bool], str]
+_PROTECTED_GROUP_ROLES = {"admin", "owner"}
+
+
+def _get_mapping_or_attr(value: object, key: str) -> object:
+    if isinstance(value, Mapping):
+        return value.get(key)
+    return getattr(value, key, None)
+
+
+def _normalize_group_role(value: object) -> str | None:
+    if value in {None, ""}:
+        return None
+    role = str(value).lower()
+    if role in {"member", "admin", "owner"}:
+        return role
+    return None
+
+
+def _resolve_protected_sender_role(event: AstrMessageEvent, user_id: str) -> str | None:
+    """从事件已携带的信息中解析发送者群角色，仅返回需要免疫的角色。"""
+    message_obj = getattr(event, "message_obj", None)
+
+    raw_message = getattr(message_obj, "raw_message", None)
+    sender = _get_mapping_or_attr(raw_message, "sender")
+    role = _normalize_group_role(_get_mapping_or_attr(sender, "role"))
+    if role in _PROTECTED_GROUP_ROLES:
+        return role
+
+    group = getattr(message_obj, "group", None)
+    group_owner = getattr(group, "group_owner", None)
+    if group_owner not in {None, ""} and str(group_owner) == str(user_id):
+        return "owner"
+
+    group_admins = getattr(group, "group_admins", None)
+    if group_admins and str(user_id) in {str(admin_id) for admin_id in group_admins}:
+        return "admin"
+
+    return None
 
 
 def _resolve_bot_self_id(event: AstrMessageEvent) -> str:
@@ -42,16 +81,15 @@ async def _get_group_member_role(
     event: AstrMessageEvent,
     group_id_int: int,
     user_id_int: int,
-    self_id: int,
 ) -> str:
     """查询群成员角色，统一返回 owner/admin/member。"""
     info = await event.bot.call_action(
         "get_group_member_info",
         group_id=group_id_int,
         user_id=user_id_int,
-        self_id=self_id,
+        no_cache=False,
     )
-    return str(info.get("role", "member"))
+    return _normalize_group_role(info.get("role")) or "member"
 
 
 @dataclass(slots=True)
@@ -81,6 +119,28 @@ class SelfMuteService:
 
         user_id = event.get_sender_id()
         user_name = event.get_sender_name()
+
+        sender_role = _resolve_protected_sender_role(event, user_id)
+        if sender_role in _PROTECTED_GROUP_ROLES:
+            logger.debug("发送者免疫: sender_role=%s, user_id=%s", sender_role, user_id)
+            return "群主和管理员对本指令免疫的噢!~"
+
+        try:
+            group_id_int = _require_int_id(group_id, "group_id")
+            user_id_int = _require_int_id(user_id, "user_id")
+            if sender_role is None:
+                sender_role = await _get_group_member_role(
+                    event,
+                    group_id_int=group_id_int,
+                    user_id_int=user_id_int,
+                )
+            logger.debug("发送者权限查询结果: sender_role=%s, user_id=%s", sender_role, user_id)
+            if sender_role in _PROTECTED_GROUP_ROLES:
+                return "群主和管理员对本指令免疫的噢!~"
+        except Exception as e:
+            logger.exception("无法获取发送者权限信息: %s", e)
+            return "无法确认发送者群权限，请稍后重试"
+
         logger.debug("通过权限检查: user_id=%s, user_name=%s", user_id, user_name)
 
         async with self.state_lock:
@@ -92,29 +152,15 @@ class SelfMuteService:
 
             try:
                 bot_self_id = _resolve_bot_self_id(event)
-                group_id_int = _require_int_id(group_id, "group_id")
-                user_id_int = _require_int_id(user_id, "user_id")
                 bot_self_id_int = _require_int_id(bot_self_id, "bot_self_id")
-
-                sender_role = await _get_group_member_role(
-                    event,
-                    group_id_int=group_id_int,
-                    user_id_int=user_id_int,
-                    self_id=bot_self_id_int,
-                )
-                logger.debug("发送者权限查询结果: sender_role=%s, user_id=%s", sender_role, user_id)
-                if sender_role in {"admin", "owner"}:
-                    return "群主和管理员对本指令免疫的噢!~"
-
                 logger.debug("检查 Bot 权限: bot_self_id=%s, group_id=%s", bot_self_id, group_id)
                 bot_role = await _get_group_member_role(
                     event,
                     group_id_int=group_id_int,
                     user_id_int=bot_self_id_int,
-                    self_id=bot_self_id_int,
                 )
                 logger.debug("Bot 权限查询结果: bot_role=%s", bot_role)
-                if bot_role not in {"admin", "owner"}:
+                if bot_role not in _PROTECTED_GROUP_ROLES:
                     return "机器人权限不足: 非群主或管理员,无法执行禁言操作😭..."
             except Exception as e:
                 logger.exception("无法获取机器人权限信息: %s", e)
@@ -135,7 +181,6 @@ class SelfMuteService:
                     group_id=group_id_int,
                     user_id=user_id_int,
                     duration=duration,
-                    self_id=bot_self_id_int,
                 )
                 logger.debug("set_group_ban 执行成功")
             except Exception as e:

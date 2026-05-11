@@ -1,6 +1,7 @@
 """SelfMute 插件核心功能测试"""
 import asyncio
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -118,6 +119,104 @@ class TestPermission:
         results = await _invoke(plugin, event, "666")
         assert len(results) == 1
         assert "免疫" in results[0]
+
+    @pytest.mark.asyncio
+    async def test_owner_immunity_uses_raw_onebot_sender_role(self, plugin, make_event):
+        """群主免疫 — 优先使用 OneBot 原始 sender.role，避免群主被误禁言"""
+        event = make_event()
+        event.message_obj = SimpleNamespace(
+            raw_message={"sender": {"role": "owner"}},
+            group=None,
+            self_id="999888777",
+        )
+        event.bot.call_action = AsyncMock()
+
+        results = await _invoke(plugin, event, "666")
+
+        assert len(results) == 1
+        assert "免疫" in results[0]
+        event.bot.call_action.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_admin_immunity_uses_group_admins_from_message_obj(self, plugin, make_event):
+        """管理员免疫 — 支持 AstrBot Group.group_admins 兜底"""
+        event = make_event()
+        event.message_obj = SimpleNamespace(
+            raw_message={},
+            group=SimpleNamespace(group_owner="111111", group_admins=["789012"]),
+            self_id="999888777",
+        )
+        event.bot.call_action = AsyncMock()
+
+        results = await _invoke(plugin, event, "666")
+
+        assert len(results) == 1
+        assert "免疫" in results[0]
+        event.bot.call_action.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_owner_immunity_short_circuits_before_daily_limit(self, plugin, make_event):
+        """群主免疫优先于每日次数限制，不进入状态更新或禁言流程"""
+        event = make_event()
+        event.message_obj = SimpleNamespace(
+            raw_message={"sender": {"role": "owner"}},
+            group=None,
+            self_id="999888777",
+        )
+        today = date.today().isoformat()
+        plugin.get_kv_data = AsyncMock(
+            return_value={
+                "date": today,
+                "counters": {"123456": {"789012": MAX_DAILY_COUNT}},
+            }
+        )
+
+        results = await _invoke(plugin, event, "666")
+
+        assert len(results) == 1
+        assert "免疫" in results[0]
+        plugin.get_kv_data.assert_not_called()
+        plugin.put_kv_data.assert_not_called()
+        event.bot.call_action.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_astrbot_admin_role_does_not_imply_group_admin(self, plugin, make_event):
+        """AstrBot 内部管理员不是群管理员，群身份必须以 OneBot 查询结果为准"""
+        event = make_event(sender_role="member")
+        event.role = "admin"
+
+        results = await _invoke(plugin, event, "666")
+
+        assert len(results) == 1
+        assert "选择了自裁" in results[0]
+
+    @pytest.mark.asyncio
+    async def test_onebot_actions_use_standard_parameters(self, plugin, make_event):
+        """OneBot 权限与禁言调用不携带非标准 self_id 参数"""
+        event = make_event()
+
+        results = await _invoke(plugin, event, "300")
+
+        assert len(results) == 1
+        assert "选择了自裁" in results[0]
+        event.bot.call_action.assert_any_await(
+            "get_group_member_info",
+            group_id=123456,
+            user_id=789012,
+            no_cache=False,
+        )
+        event.bot.call_action.assert_any_await(
+            "get_group_member_info",
+            group_id=123456,
+            user_id=999888777,
+            no_cache=False,
+        )
+        event.bot.call_action.assert_any_await(
+            "set_group_ban",
+            group_id=123456,
+            user_id=789012,
+            duration=300,
+        )
 
     @pytest.mark.asyncio
     async def test_bot_no_permission(self, plugin, make_event):
